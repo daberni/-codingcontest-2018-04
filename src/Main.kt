@@ -19,7 +19,7 @@ data class Occurance(val timestamp: Int, val image: List<Position>) {
 
 fun main(args: Array<String>) {
 
-    val level = "lvl2"
+    val level = "lvl3"
 
     File("input").listFiles({ dir, filename -> filename.startsWith(level) }).sortedBy { it.name }.forEach {
         val result = processFile(it)
@@ -60,11 +60,48 @@ fun processFile(file: File): List<String> {
         Occurance(timestamp, image)
     }
 
-    val result = asteroids
+    val shapes = asteroids
             .filter { it.hasData }
             .groupBy { it.shape }.values
             .map { it.sortedBy { it.timestamp } }
-            .sortedBy { it.first().timestamp }
 
-    return result.map { "${it.first().timestamp} ${it.last().timestamp} ${it.count()}" }
+    val intervalled = shapes.flatMap { group ->
+        val pairs = group.mapIndexed { index1, occurance1 ->
+            group.mapIndexedNotNull { index2, occurance2 ->
+                if (index2 > index1) occurance1 to occurance2
+                else null
+            }
+        }.flatten().map { it to (it.second.timestamp - it.first.timestamp) }
+
+        val intervals = pairs.groupBy({ it.second }, { it.first })
+        val filteredIntervals = intervals.filter { interval ->
+            intervals.none { interval.key != it.key && it.key % interval.key == 0 || interval.value.containsAll(it.value) }
+        }
+        intervals.flatMap { (interval, pairs) ->
+            val offsets = pairs.groupBy { it.first.timestamp % interval }
+            /*
+            val sequences = offsets.values.map {
+                it.flatMap { it.toList() }
+            }
+            */
+            val sequences = pairs.fold(mutableListOf(mutableListOf<Occurance>())) { mutableList, pair ->
+                if (mutableList.last().isEmpty()) {
+                    mutableList.last().add(pair.first)
+                    mutableList.last().add(pair.second)
+                } else if (mutableList.last().last() == pair.first) {
+                    mutableList.last().add(pair.second)
+                } else {
+                    mutableList.add(mutableListOf(pair.first, pair.second))
+                }
+                mutableList
+            }
+            sequences.map { interval to it as List<Occurance> }
+        }
+    }
+            .filter { it.second.count() >= 4 }
+            .filter { it.second.first().timestamp <= (start + it.first) }
+            .filter { it.second.last().timestamp >= (end - it.first) }
+            .sortedBy { it.second.first().timestamp }
+
+    return intervalled.map { "${it.second.first().timestamp} ${it.second.last().timestamp} ${it.second.count()}" }
 }
